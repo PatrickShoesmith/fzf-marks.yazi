@@ -84,25 +84,12 @@ local function expand_home(path)
   return path
 end
 
---- Return the last path component of `path` (e.g. "/a/b/c" -> "c"), used as
---- the suggested label when adding a mark.
---
--- Trailing slashes are stripped first, since "[^/\\]+$" can't match anything
--- at the very end of a string that already ends in a separator (that would
--- otherwise silently fall through to returning the *whole* path -- notably
--- for a filesystem root like "/" or "C:\"). If nothing is left after
--- stripping (i.e. `path` was nothing but separators, as "/" itself is), fall
--- back to the original `path` -- there's no shorter sensible label for that
--- case anyway.
+--- Return the last path component of `path`, used as the suggested label when
+--- adding a mark.
 ---@param path string
 ---@return string
 local function basename(path)
-  local trimmed = path:gsub("[/\\]+$", "")
-  local base = trimmed:match("([^/\\]+)$")
-  if base and base ~= "" then
-    return base
-  end
-  return path
+  return path:match("([^/\\]+)[/\\]*$") or path
 end
 
 --- Open `path` in `mode`, notifying with both the path and the OS-provided
