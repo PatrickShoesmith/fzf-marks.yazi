@@ -50,14 +50,20 @@ end
 -- falls back to ~/.fzf-marks when it isn't set. We mirror that exact
 -- resolution order so this plugin reads the same file the fzf-marks CLI writes
 -- to -- no separate config needed.
----@return string
+---@return string?
 local function marks_file()
   local env = os.getenv("FZF_MARKS_FILE")
   if env and env ~= "" then
     return env
   end
 
-  return string.format("%s/.fzf-marks", get_home())
+  local home = get_home()
+  if home == "" then
+    notify("Could not determine home directory", "error")
+    return nil
+  end
+
+  return string.format("%s/.fzf-marks", home)
 end
 
 --- Expand a leading "~" to $HOME.
@@ -184,7 +190,10 @@ local function add_mark()
   if event ~= 1 then return end
   value = (value == nil or value == "") and default_label or value
 
-  local file = try_open(marks_file(), "a")
+  local path = marks_file()
+  if not path then return end
+
+  local file = try_open(path, "a")
   if not file then return end
 
   file:write(string.format("%s : %s\n", value, cwd))
@@ -360,6 +369,8 @@ function M:entry(job)
   end
 
   local path = marks_file()
+  if not path then return end
+
   local lines, display, targets = load_marks(path)
   if not lines then
     return
