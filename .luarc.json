@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime": {
+    "version": "Lua 5.4",
+    "builtin": {
+      "string": "enable",
+      "table": "enable",
+      "math": "enable",
+      "coroutine": "enable",
+      "utf8": "enable"
+    }
+  },
+  "workspace": {
+    "library": [
+      "~/.config/yazi/plugins/types.yazi/"
+    ],
+    "checkThirdParty": "Disable"
+  }
+}
