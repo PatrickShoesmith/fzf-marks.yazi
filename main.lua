@@ -1,4 +1,4 @@
--- fzf-marks.lua
+-- fzf-marks
 --
 -- A Yazi plugin that lets you jump to one of your fzf-marks bookmarks.
 --
@@ -16,8 +16,10 @@
 --   * A separate "add" entry point (bind it to its own key) that prompts for a
 --     label and appends "label : <cwd>" to the marks file.
 --
+-- Not all functionality of fzf-marks is currently supported
+--
 -- Author: T V Raziman
--- Supported by: Claude Sonnet 5, Gemini 3 Pro
+-- Supported by: Claude Sonnet 5, Gemini 3 Pro, ChatGPT-5
 -- Date: 2026-08-22
 
 local M = {}
