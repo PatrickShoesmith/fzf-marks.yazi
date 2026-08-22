@@ -118,34 +118,52 @@ local cwd_state = ya.sync(function()
 end)
 
 --- Parse the contents of a marks file into:
---   1. `lines`    -- the raw "label : target" lines, verbatim, used when
---                    rewriting the file after a delete.
---   2. `display`  -- the same lines wrapped in ANSI color codes and prefixed
---                    with a 1-based index + tab, fed to fzf for display.
---   3. `targets`  -- the target paths only, in the same order as `lines`,
---                    used to resolve the selected line back to a path in
---                    O(1) via the index fzf reports (see run_fzf).
+--   1. `lines`    -- all source lines, including lines that aren't valid
+--                    marks, so deleting a mark doesn't discard non-mark lines.
+--   2. `display`  -- valid marks wrapped in ANSI color codes and prefixed with
+--                    a 1-based index + tab, fed to fzf for display.
+--   3. `targets`  -- the target paths only, in the same order as `display`.
+--   4. `line_indices` -- the source-line index for each valid mark, used to
+--                        remove the mark without removing other lines.
 --
 -- Lines without a colon (blank lines, stray junk, etc.) are silently skipped
--- rather than erroring.
+-- rather than shown in fzf.
 ---@param content string
----@return string[], string[], string[]
+---@return string[], string[], string[], integer[]
 local function parse_marks(content)
-  local lines, display, targets = {}, {}, {}
-  for line in content:gmatch("[^\r\n]+") do
-    local label, target = line:match("^(.-)%s*:%s*(.+)$")
-    if label and target and label ~= "" then
+  local lines, display, targets, line_indices = {}, {}, {}, {}
+  local line_no = 0
+
+  local function add_line(line)
+    line_no = line_no + 1
+    table.insert(lines, line)
+
+    -- Use the last " : " separator so colons in labels and targets are kept.
+    local label, target = line:match("^(.*)%s+:%s+(.+)%s*$")
+    if label and target then
+      label = label:gsub("%s+$", "")
       target = target:gsub("%s+$", "")
-      table.insert(lines, line)
-      table.insert(targets, target)
-      -- Prepend line index for O(1) resolution via fzf delimiter
-      table.insert(display, string.format(
-        "%d\t\27[%sm%s\27[0m : \27[%sm%s\27[0m",
-        #lines, LABEL_COLOR, label, TARGET_COLOR, target
-      ))
+      if label ~= "" and target ~= "" then
+        table.insert(targets, target)
+        table.insert(line_indices, line_no)
+        -- Prepend mark index for O(1) resolution via fzf delimiter.
+        table.insert(display, string.format(
+          "%d\t\27[%sm%s\27[0m : \27[%sm%s\27[0m",
+          #display + 1, LABEL_COLOR, label, TARGET_COLOR, target
+        ))
+      end
     end
   end
-  return lines, display, targets
+
+  for line in content:gmatch("(.-)\r?\n") do
+    add_line(line)
+  end
+
+  if content ~= "" and content:sub(-1) ~= "\n" then
+    add_line(content:match("([^\r\n]*)$") or "")
+  end
+
+  return lines, display, targets, line_indices
 end
 
 --- Persist the source lines to the marks file using a temp intermediate
@@ -263,27 +281,37 @@ end
 
 --- Load and parse the marks file at `path`.
 --
--- Returns lines, display, targets on success. On failure (can't open the
--- file, or it has no valid marks), notifies the user itself and returns
--- nothing -- callers just check for a nil first return.
+-- Returns lines, display, targets, and source-line indices on success. On
+-- failure (can't open the file, or it has no valid marks), notifies the user
+-- itself and returns nothing -- callers just check for a nil first return.
 ---@param path string
----@return string[]?, string[]?, string[]?
+---@return string[]?, string[]?, string[]?, integer[]?
 local function load_marks(path)
   local file = try_open(path, "r")
   if not file then
     return nil
   end
 
-  local content = file:read("*a")
-  file:close()
+  local content, read_err = file:read("*a")
+  local close_ok, close_err = file:close()
+  if not content then
+    return notify(string.format(
+      "Could not read marks file %s: %s", path, tostring(read_err)
+    ), "error")
+  end
+  if not close_ok then
+    return notify(string.format(
+      "Could not close marks file %s: %s", path, tostring(close_err)
+    ), "error")
+  end
 
-  local lines, display, targets = parse_marks(content)
-  if #lines == 0 then
+  local lines, display, targets, line_indices = parse_marks(content)
+  if #display == 0 then
     notify("No marks found in " .. path, "warn")
     return nil
   end
 
-  return lines, display, targets
+  return lines, display, targets, line_indices
 end
 
 --- Run the interactive fzf + Ctrl-D loop.
@@ -293,16 +321,17 @@ end
 -- redraws -- e.g. deleting several marks in a row stays inside one
 -- uninterrupted fzf session.
 --
--- `lines`/`display`/`targets` are mutated in place as marks are deleted, and
--- the on-disk file at `path` is rewritten to match after each one. Returns
--- the 1-based index (into `targets`) of the mark the user picked, or nil if
--- they cancelled (Esc/Ctrl-C) or something went wrong along the way.
+-- `lines`/`display`/`targets`/`line_indices` are mutated in place as marks are
+-- deleted and the on-disk file at `path` is rewritten to match after each one.
+-- Returns the 1-based index (into `targets`) of the mark the user picked, or
+-- nil if they cancelled (Esc/Ctrl-C) or something went wrong along the way.
 ---@param path string
 ---@param lines string[]
 ---@param display string[]
 ---@param targets string[]
+---@param line_indices integer[]
 ---@return integer?
-local function pick_mark(path, lines, display, targets)
+local function pick_mark(path, lines, display, targets, line_indices)
   local permit = ui.hide()
 
   while true do
@@ -333,23 +362,19 @@ local function pick_mark(path, lines, display, targets)
     -- Ctrl-D with nothing highlighted (e.g. the filter matched nothing) --
     -- idx is nil; just redraw and let the user adjust their query or quit.
     if idx then
-      -- Remove index `idx` in O(1) by swapping the last element into its
-      -- slot and popping the tail, rather than shifting every later element
-      -- down by one. Trade-off worth knowing: this does NOT preserve the
-      -- original ordering of the remaining marks in the file -- whatever
-      -- was last takes over the deleted slot.
-      local last = #lines
-      if idx < last then
-        lines[idx] = lines[last]
-        targets[idx] = targets[last]
-        -- Re-stamp only the swapped item's display string with its new index
-        display[idx] = display[last]:gsub("^%d+\t", idx .. "\t")
-      end
+      local source_idx = line_indices[idx]
 
-      -- Pop the tail (O(1) removal)
-      table.remove(lines)
-      table.remove(display)
-      table.remove(targets)
+      -- Remove the selected mark while preserving the order of the remaining
+      -- marks and all unrelated source lines.
+      table.remove(lines, source_idx)
+      table.remove(targets, idx)
+      table.remove(display, idx)
+      table.remove(line_indices, idx)
+
+      -- The source-line indices after the deleted line shifted by one.
+      for i = idx, #line_indices do
+        line_indices[i] = line_indices[i] - 1
+      end
 
       if not save_marks(path, lines) then
         -- The in-memory list is now ahead of what's on disk. Stop here
@@ -360,7 +385,7 @@ local function pick_mark(path, lines, display, targets)
         return nil
       end
 
-      if #lines == 0 then
+      if #display == 0 then
         permit:drop()
         notify("No marks left")
         return nil
@@ -375,9 +400,11 @@ end
 local function jump_to(target)
   local url = Url(expand_home(target))
 
-  local cha = fs.cha(url)
+  local cha, err = fs.cha(url)
   if not cha then
-    return notify(string.format("%s no longer exists", tostring(url)), "error")
+    return notify(string.format(
+      "Could not access %s: %s", tostring(url), tostring(err)
+    ), "error")
   end
 
   ya.emit(cha.is_dir and "cd" or "reveal", { url, raw = true })
@@ -397,12 +424,12 @@ function M:entry(job)
   local path = marks_file()
   if not path then return end
 
-  local lines, display, targets = load_marks(path)
+  local lines, display, targets, line_indices = load_marks(path)
   if not lines then
     return
   end
 
-  local idx = pick_mark(path, lines, display, targets)
+  local idx = pick_mark(path, lines, display, targets, line_indices)
   if not idx then
     return
   end
