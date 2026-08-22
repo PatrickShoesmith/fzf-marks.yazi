@@ -148,17 +148,41 @@ local function parse_marks(content)
   return lines, display, targets
 end
 
---- Persist a list of "label : target" lines to the marks file.
+--- Persist the source lines to the marks file using a temp intermediate
 ---@param path string
 ---@param lines string[]
 ---@return boolean success
 local function save_marks(path, lines)
-  local out_file = try_open(path, "w")
+  local tmp_path = path .. ".tmp"
+  local out_file = try_open(tmp_path, "w")
   if not out_file then
     return false
   end
-  out_file:write(table.concat(lines, "\n") .. (#lines > 0 and "\n" or ""))
-  out_file:close()
+
+  local function handle_error(msg, err)
+    os.remove(tmp_path)
+    notify(string.format(msg, path, tostring(err)), "error")
+    return false
+  end
+
+  local ok, err = out_file:write(
+    table.concat(lines, "\n") .. (#lines > 0 and "\n" or "")
+  )
+  if not ok then
+    out_file:close()
+    return handle_error("Could not write marks file %s: %s", err)
+  end
+
+  local close_ok, close_err = out_file:close()
+  if not close_ok then
+    return handle_error("Could not close marks file %s: %s", close_err)
+  end
+
+  local rename_ok, rename_err = os.rename(tmp_path, path)
+  if not rename_ok then
+    return handle_error("Could not replace marks file %s: %s", rename_err)
+  end
+
   return true
 end
 
