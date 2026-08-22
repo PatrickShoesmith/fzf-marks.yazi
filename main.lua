@@ -209,8 +209,21 @@ local function add_mark()
   local file = try_open(path, "a")
   if not file then return end
 
-  file:write(string.format("%s : %s\n", value, cwd))
-  file:close()
+  local ok, err = file:write(string.format("%s : %s\n", value, cwd))
+  if not ok then
+    file:close()
+    return notify(string.format(
+      "Could not write marks file %s: %s", path, tostring(err)
+    ), "error")
+  end
+
+  local close_ok, close_err = file:close()
+  if not close_ok then
+    return notify(string.format(
+      "Could not close marks file %s: %s", path, tostring(close_err)
+    ), "error")
+  end
+
   notify(string.format('Added mark "%s"', value))
 end
 
