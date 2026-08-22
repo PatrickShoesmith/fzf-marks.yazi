@@ -248,11 +248,14 @@ end
 --- Spawn `fzf`, feed it `lines` on stdin, and return whatever `fzf` printed
 --- on stdout (the --expect key, then the selected line).
 ---@param lines string[]
+---@param query string
 ---@return string?, Error?
-local function run_fzf(lines)
+local function run_fzf(lines, query)
   local child, spawn_err = Command("fzf")
       :arg("--ansi")
       :arg("--expect=ctrl-d")
+      :arg("--print-query")
+      :arg("--query=" .. query)
       :arg("--delimiter=\t")
       :arg("--with-nth=2..")
       :stdin(Command.PIPED)
@@ -333,23 +336,30 @@ end
 ---@return integer?
 local function pick_mark(path, lines, display, targets, line_indices)
   local permit = ui.hide()
+  local query = ""
 
   while true do
-    local output, run_err = run_fzf(display)
+    local output, run_err = run_fzf(display, query)
     if not output then
       permit:drop()
       notify(tostring(run_err), "error")
       return nil
     end
 
-    -- With --expect=ctrl-d, fzf's stdout is "<key>\n<line>\n": the key that
-    -- ended the session (empty string for a normal Enter, or for Esc/Ctrl-C
-    -- with nothing to report), followed by whatever entry was highlighted at
-    -- the time (itself "<index>\t<colorized label : target>", or empty if
-    -- nothing was highlighted).
-    local split_at = output:find("\n") or (#output + 1)
-    local key = output:sub(1, split_at - 1)
-    local raw_selection = output:sub(split_at + 1):gsub("[\r\n]+$", "")
+    -- With --expect=ctrl-d and --print-query, fzf's stdout is
+    -- "<key>\n<query>\n<line>\n": the key that ended the session (empty for a
+    -- normal Enter, or for Esc/Ctrl-C with nothing to report), followed by the
+    -- query string, and whatever entry was highlighted at the time (itself
+    -- "<index>\t<colorized label : target>", or empty if nothing was
+    -- highlighted).
+    local first_newline = output:find("\n") or (#output + 1)
+    query = output:sub(1, first_newline - 1)
+
+    local rest = output:sub(first_newline + 1)
+    local second_newline = rest:find("\n") or (#rest + 1)
+    local key = rest:sub(1, second_newline - 1)
+
+    local raw_selection = rest:sub(second_newline + 1):gsub("[\r\n]+$", "")
     local idx = tonumber(raw_selection:match("^(%d+)%s*\t"))
 
     if key ~= "ctrl-d" then
