@@ -7,13 +7,11 @@
 --
 --     label : /absolute/path/to/somewhere
 --
--- This plugin reads that same file, hands the lines to `fzf` for fuzzy
--- filtering (exactly like fzf.lua does for file search), and then asks yazi to
--- `cd` to whatever you picked.
+-- This plugin reads that same file, hands valid marks to `fzf` for fuzzy
+-- filtering, and then asks yazi to `cd` to whatever you picked.
 --
 -- The plugin also supports:
---   * Ctrl-D inside fzf to delete the highlighted mark (like fzf-marks' own
---     Ctrl-D binding).
+--   * Ctrl-D inside fzf to delete the highlighted mark.
 --   * Colorizing the label and the target differently
 --   * A separate "add" entry point (bind it to its own key) that prompts for a
 --     label and appends "label : <cwd>" to the marks file.
