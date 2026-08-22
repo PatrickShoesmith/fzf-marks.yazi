@@ -76,7 +76,9 @@ end
 ---@return string
 local function expand_home(path)
   local home = get_home()
-  if home ~= "" and path:sub(1, 1) == "~" then
+  if home ~= "" and (
+    path == "~" or path:sub(1, 2) == "~/" or path:sub(1, 2) == "~\\"
+  ) then
     return home .. path:sub(2)
   end
   return path
