@@ -12,7 +12,7 @@ Yazi.
 
 ## Features
 
-- **Jump to a mark**: fuzzy-filter your bookmarks with `fzf` and `cd`  to
+- **Jump to a mark**: fuzzy-filter your bookmarks with `fzf` and `cd` to
   whichever one you pick.
 - **Delete a mark with `Ctrl-D`** from inside the picker: comments, blank
   lines, and anything else in your marks file that isn't a recognized mark are
@@ -38,17 +38,17 @@ writes its file format directly
 Using Yazi's plugin manager:
 
 ```sh
-ya pkg add razimantv/fzf-marks
+ya pkg add PatrickShoesmith/fzf-marks
 ```
 
 Or manually:
 
 ```sh
 # Linux / macOS
-git clone https://github.com/razimantv/fzf-marks.yazi ~/.config/yazi/plugins/fzf-marks.yazi
+git clone https://github.com/PatrickShoesmith/fzf-marks.yazi ~/.config/yazi/plugins/fzf-marks.yazi
 
 # Windows
-git clone https://github.com/razimantv/fzf-marks.yazi %AppData%\yazi\config\plugins\fzf-marks.yazi
+git clone https://github.com/PatrickShoesmith/fzf-marks.yazi %AppData%\yazi\config\plugins\fzf-marks.yazi
 ```
 
 ## Configuration
@@ -74,8 +74,8 @@ default slot) is another natural choice for the jump command.
 
 ## Usage
 
-| Add a mark | Jump to a mark |
-|------------|----------------|
+| Add a mark                     | Jump to a mark                     |
+| ------------------------------ | ---------------------------------- |
 | ![add a mark](assets/mark.png) | ![jump to a mark](assets/jump.png) |
 
 - Invoke the add keybinding to bookmark the current directory. Leave the
